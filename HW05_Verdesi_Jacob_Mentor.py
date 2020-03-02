@@ -136,7 +136,6 @@ def decisionTree(data, attributes, depth):
             if attribute == "Class":
                 pass
             else:
-
                 attThresh,gini=bestThreshold(data,attribute)
                 if gini>goodNess:
                     bestSplit=attribute
