@@ -22,12 +22,13 @@ class Tree(object):
         self.depth = depth
         self.thresh=thresh
         self.gini = gini
+        self.rightNode=False
         self.leaf = False
 
     def __str__(self):
         if self.leaf:
             return ""
-        return "\n"+'| ' * self.depth + self.attribute+" "+str(self.thresh)+" "+str(self.gini)+" "+str(self.right)+str(self.left)
+        return "\n"+'|\t' * self.depth + self.attribute+" "+str(self.thresh)+" "+str(self.gini)+" "+str(self.right)+str(self.left)
 
 def comment(str):
     return "\"\"\"{" + str + "}\"\"\";"
@@ -122,7 +123,7 @@ def bestThreshold(data,attribute,lessThanThresh=False):
     # plt.show()
     return bestThresh,bestGini
 def decisionTree(data, attributes, depth):
-    if depth > 3 :
+    if depth > 5 :
         tree=Tree(None,None,"leaf",depth,0,0)
         tree.leaf=True
         return tree
@@ -148,11 +149,12 @@ def decisionTree(data, attributes, depth):
         left = data[data[bestSplit] < bestThresh]
         right = data[data[bestSplit] >= bestThresh]
         attributes.remove(bestSplit)
-        removedList=attributes.copy()
+        leftList=attributes.copy()
+        rightList=attributes.copy()
         left.drop(columns=[bestSplit])
         right.drop(columns=[bestSplit])
-        leftT=decisionTree(left,removedList,depth+1)
-        rightT=decisionTree(right,removedList,depth+1)
+        leftT=decisionTree(left,leftList,depth+1)
+        rightT=decisionTree(right,rightList,depth+1)
         tree=Tree(leftT,rightT,bestSplit,depth,bestThresh,goodNess)
         return tree
 
