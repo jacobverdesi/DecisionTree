@@ -103,57 +103,102 @@ def get_quantized_bin_size(data, attribute):
 
 
 def decisionTreeHelper(data):
-    return decisionTree(data, [att for att in data], 0)
+    return decisionTree(data, 0)
 def bestThreshold(data,attribute,lessThanThresh=False):
     index = get_quantized_bin_size(data, attribute)
+    #index=1
     bestThresh=0
-    bestGini=0
+    bestGini=math.inf
     thresh=[]
     giniList=[]
+    leftGiniList=[]
+    tpList=[]
+    tnList=[]
+    fpList=[]
+    fnList=[]
     for threshold in range(min(data[attribute]), max(data[attribute]) + index, index):
-        lessThan=data[attribute][data[attribute] <threshold].count()
-        greaterEqualTo=data[attribute][data[attribute]>=threshold].count()
-        gini=1-math.pow(lessThan/data.shape[0],2)-math.pow(greaterEqualTo/data.shape[0],2)
+        tn = data[(data[attribute] < threshold) & (data["Class"] == -1)].count()[attribute]
+        tp = data[(data[attribute] >= threshold) & (data["Class"] == 1)].count()[attribute]
+        fp = data[(data[attribute] < threshold) & (data["Class"] == 1)].count()[attribute]
+        fn = data[(data[attribute] >= threshold) & (data["Class"] == -1)].count()[attribute]
+
+        Leftright = tp + tn
+        Leftwrong = fp + fn
+        #
+        # tp = data[(data[attribute] >= threshold) & (data["Class"] == -1)].count()[attribute]
+        # tn = data[(data[attribute] < threshold) & (data["Class"] == 1)].count()[attribute]
+        # fn = data[(data[attribute] >= threshold) & (data["Class"] == 1)].count()[attribute]
+        # fp = data[(data[attribute] < threshold) & (data["Class"] == -1)].count()[attribute]
+        # Rightright = tp + tn
+        # Rightwrong = fp + fn
+        #print(threshold,right,wrong)
+        # lessThan=data[attribute][data[attribute] <threshold].count()
+        # greaterEqualTo=data[attribute][data[attribute]>=threshold].count()
+        #print(threshold,Leftright,Leftwrong)
+        leftGini=1-math.pow(Leftright/data.shape[0],2)-math.pow(Leftwrong/data.shape[0],2)
+        #rightGini=1-math.pow(Rightright/data.shape[0],2)-math.pow(Rightwrong/data.shape[0],2)
         thresh.append(threshold)
-        giniList.append(gini)
-        if gini > bestGini:
+        giniList.append(leftGini)
+        #rightGiniList.append(rightGini)
+        tpList.append(tp)
+        tnList.append(tn)
+        fpList.append(fp)
+        fnList.append(fn)
+        leftGiniList.append(leftGini)
+        if leftGini < bestGini:
             bestThresh = threshold
-            bestGini=gini
-    # plt.scatter(thresh, giniList)
-    # plt.show()
+            bestGini=leftGini
+
+
+    # if not lessThanThresh and len(giniList)>2 and 2>giniList.index(max(giniList))>len(giniList)-2:
+    #     return bestThreshold(data,attribute,True)
+    bins=range(min(data[attribute]), max(data[attribute]) + index, index)
+    #plt.hist(data[attribute],color="red",alpha=0.5)
+    plt.bar(thresh,tpList,label="tp",color='b',alpha=.5,stacked=True)
+    plt.bar(thresh,fpList, label="fp", color='y', alpha=.5)
+    plt.bar(thresh,tnList,label="tn",color='g',alpha=.5)
+    plt.bar(thresh,fnList,label="fn",color='r',alpha=.5)
+    plt.twinx()
+    plt.scatter(thresh, leftGiniList,color="blue")
+    #plt.scatter(thresh,rightGiniList,color="red")
+    plt.ylabel("Gini Index: "+str(bestGini))
+    plt.xlabel("Thresholds Best: "+str(bestThresh))
+    plt.axvline(bestThresh)
+    plt.title(attribute+' Thresholds vs Gini Index')
+    plt.show()
     return bestThresh,bestGini
-def decisionTree(data, attributes, depth):
-    if depth > 5 :
+def decisionTree(data, depth):
+
+    if depth > 3 or data.shape[0]<15:
         tree=Tree(None,None,"leaf",depth,0,0)
         tree.leaf=True
         return tree
     else:
-        bestSplit = attributes[0]
-        bestThresh = min(attributes[0])
-        goodNess = 0
+
+        bestSplit = data.columns[0]
+        bestThresh = min(data.columns[0])
+        goodNess = math.inf
         #print(depth)
-        for attribute in attributes:
+        for attribute in data:
             if attribute == "Class":
                 pass
             else:
                 attThresh,gini=bestThreshold(data,attribute)
-                if gini>goodNess:
+                if gini<goodNess:
                     bestSplit=attribute
                     bestThresh=attThresh
                     goodNess=gini
-                print(f"\tAttribute: {attribute}, Threshold: {attThresh}, Misses: {gini}")
-        print(bestSplit,bestThresh,goodNess)
+                space="\t"*depth
+                print(f"{space}Attribute: {attribute}, Threshold: {attThresh}, Gini: {gini}")
+        print("Best: ",bestSplit,bestThresh,goodNess)
 
 
-        left = data[data[bestSplit] < bestThresh]
-        right = data[data[bestSplit] >= bestThresh]
-        attributes.remove(bestSplit)
-        leftList=attributes.copy()
-        rightList=attributes.copy()
-        left.drop(columns=[bestSplit])
-        right.drop(columns=[bestSplit])
-        leftT=decisionTree(left,leftList,depth+1)
-        rightT=decisionTree(right,rightList,depth+1)
+        left = data[data[bestSplit] >= bestThresh]
+        right = data[data[bestSplit] < bestThresh]
+        left=left.drop(columns=bestSplit)
+        right=right.drop(columns=[bestSplit])
+        rightT=decisionTree(right,depth+1)
+        leftT=decisionTree(left,depth+1)
         tree=Tree(leftT,rightT,bestSplit,depth,bestThresh,goodNess)
         return tree
 
@@ -162,8 +207,9 @@ def main():
     writeFile = "HW05_Verdesi_Jacob_Trainer.py"
     file = open(writeFile, "w")
 
-    data = quantize(pd.read_csv(fileName, sep=','))
+    data = pd.read_csv(fileName, sep=',')
     if(fileName=="Abominable_data_HW05_v420.csv"):
+        data=quantize(data)
         data["Class"] = data['Class'].replace({"Assam": -1, "Bhuttan": 1})
     #seaborn.plot(data)
     print(decisionTreeHelper(data))
