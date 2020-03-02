@@ -1,6 +1,6 @@
 import math
 from sys import argv
-
+import seaborn
 import pandas as pd
 from matplotlib import pyplot as plt
 
@@ -15,12 +15,19 @@ from matplotlib import pyplot as plt
 
 
 class Tree(object):
-    def __init__(self):
-        self.left = None
-        self.right = None
-        self.data = None
-        self.depth = None
+    def __init__(self,left,right,attribute,depth,thresh,gini):
+        self.left = left
+        self.right = right
+        self.attribute=attribute
+        self.depth = depth
+        self.thresh=thresh
+        self.gini = gini
+        self.leaf = False
 
+    def __str__(self):
+        if self.leaf:
+            return ""
+        return "\n"+'| ' * self.depth + self.attribute+" "+str(self.thresh)+" "+str(self.gini)+" "+str(self.right)+str(self.left)
 
 def comment(str):
     return "\"\"\"{" + str + "}\"\"\";"
@@ -74,7 +81,9 @@ def quantize(data):
     data['TailLn'] = data['TailLn'].apply(lambda x: 1 * (round(x / 1)))
     data['HairLn'] = data['HairLn'].apply(lambda x: 1 * (round(x / 1)))
     data['BangLn'] = data['BangLn'].apply(lambda x: 1 * (round(x / 1)))
-    data['Reach'] = data['Reach'].apply(lambda x: 5 * (round(x / 5)))
+    data['Reach'] = data['Reach'].apply(lambda x: 1 * (round(x / 1)))
+    data['EarLobes'] = data['EarLobes'].apply(lambda x: 1 * (round(x / 1)))
+
     return data
 
 
@@ -93,104 +102,59 @@ def get_quantized_bin_size(data, attribute):
 
 
 def decisionTreeHelper(data):
-    return decisionTree(data, [att for att in data], Tree, 0)
+    return decisionTree(data, [att for att in data], 0)
 def bestThreshold(data,attribute,lessThanThresh=False):
     index = get_quantized_bin_size(data, attribute)
-    leastMisses=math.inf
-    attThresh=0
+    bestThresh=0
+    bestGini=0
+    thresh=[]
+    giniList=[]
     for threshold in range(min(data[attribute]), max(data[attribute]) + index, index):
-        out = data.copy()
-        if(lessThanThresh):
-            out['left'] = (data[attribute] >= threshold)
-        else:
-            out['left'] = (data[attribute] < threshold)
-        out['sum'] = out['left'] + out['Class']
-        miss = ((out['sum']) == 1).sum()
-        # print(attribute,threshold,"Misses",miss,"\n",out)
-        if miss < leastMisses:
-            leastMisses = miss
-            attThresh = threshold
-    return attThresh,leastMisses
-def decisionTree(data, attributes, tree, depth):
-    if depth >= 3:
-        pass
+        lessThan=data[attribute][data[attribute] <threshold].count()
+        greaterEqualTo=data[attribute][data[attribute]>=threshold].count()
+        gini=1-math.pow(lessThan/data.shape[0],2)-math.pow(greaterEqualTo/data.shape[0],2)
+        thresh.append(threshold)
+        giniList.append(gini)
+        if gini > bestGini:
+            bestThresh = threshold
+            bestGini=gini
+    # plt.scatter(thresh, giniList)
+    # plt.show()
+    return bestThresh,bestGini
+def decisionTree(data, attributes, depth):
+    if depth > 3 :
+        tree=Tree(None,None,"leaf",depth,0,0)
+        tree.leaf=True
+        return tree
     else:
         bestSplit = attributes[0]
         bestThresh = min(attributes[0])
-        goodNess = math.inf
+        goodNess = 0
+        #print(depth)
         for attribute in attributes:
             if attribute == "Class":
                 pass
             else:
-                attThresh,leastMisses=bestThreshold(data,attribute)
-                if leastMisses>len(data[attribute])/2:
-                    attThresh, leastMisses = bestThreshold(data, attribute,True)
-                if leastMisses<goodNess:
+
+                attThresh,gini=bestThreshold(data,attribute)
+                if gini>goodNess:
                     bestSplit=attribute
                     bestThresh=attThresh
-                    goodNess=leastMisses
-                print(f"Attribute: {attribute}, Threshold: {attThresh}, Misses: {leastMisses}")
+                    goodNess=gini
+                print(f"\tAttribute: {attribute}, Threshold: {attThresh}, Misses: {gini}")
         print(bestSplit,bestThresh,goodNess)
-        return
 
-    # for attribute in data:
-    #     if attribute=="Class" :
-    #         pass
-    #     else:
-    #         index=get_quantized_bin_size(data,attribute)
-    #         tprList = []
-    #         fprList = []
-    #         minMiss=math.inf
-    #         minDistance=math.inf
-    #         thresh=0
-    #         misses=[]
-    #         for threshold in range(min(data[attribute]),max(data[attribute]),index):
-    #             out = data.copy()
-    #             if (attribute=='Age'):
-    #                 out['left']=(data[attribute]>threshold)
-    #             else:
-    #                 out['left']=(data[attribute]<=threshold)
-    #             out['sum']=out['left']+out['Class']
-    #             miss=((out['sum'])==1).sum()+((out['sum'])==0).sum()
-    #             misses.append(miss)
-    #             tpr=(out['sum']==1).sum()/((out['sum']==1).sum()+(out['sum']==2).sum())
-    #             fpr=((out['sum']==-1).sum()/((out['sum']==0).sum()+(out['sum']==-1).sum()))
-    #             tprList.append(tpr)
-    #             fprList.append(fpr)
-    #             distance=math.sqrt(pow(1-fpr,2)+pow(tpr,2))
-    #             if(distance<minDistance):
-    #                 minDistance=distance
-    #                 minDistThresh=threshold
-    #             if(miss<minMiss):
-    #                 minMiss=miss
-    #                 thresh=threshold
-    #
-    #         if(minMiss<bestMinMiss):
-    #             bestThresh = thresh
-    #             bestAttribute = attribute
-    #             bestAttributeIndex = index
-    #             bestMisses = misses
-    #         print(attribute,minMiss)
-    #
-    #
-    # print(bestMinMiss,bestThresh)
-    # print(bestAttribute)
-    # print(minDistance,minDistThresh)
-    # bins=[x for x in range(min(data[bestAttribute]),max(data[bestAttribute]),bestAttributeIndex)]
-    # plt.scatter(bins,bestMisses)
-    # # plt.hist(data[bestAttribute],bins=bins,label="total",color='purple',alpha=.5,histtype='stepfilled')
-    # # plt.hist(tp[bestAttribute],bins=bins,label="tp",color='b',alpha=.5,histtype='stepfilled')
-    # # plt.hist(fp[bestAttribute],bins=bins, label="fp", color='y', alpha=.5, histtype='stepfilled')
-    # # plt.hist(tn[bestAttribute],bins=bins,label="tn",color='g',alpha=.5,histtype='stepfilled')
-    # # plt.hist(fn[bestAttribute],bins=bins,label="fn",color='r',alpha=.5,histtype='stepfilled')
-    # # plt.legend(prop={'size': 10})
-    #
-    # #plt.scatter(bestTpr,bestFpr)
-    # #rocIndex=(minDistThresh - min(data[bestAttribute])) // bestAttributeIndex
-    # #plt.annotate(minDistThresh,(bestTpr[rocIndex],bestFpr[rocIndex]))
-    # plt.show()
-    # return bestAttribute,bestThresh
 
+        left = data[data[bestSplit] < bestThresh]
+        right = data[data[bestSplit] >= bestThresh]
+        attributes.remove(bestSplit)
+        removedList=attributes.copy()
+        left.drop(columns=[bestSplit])
+        right.drop(columns=[bestSplit])
+        leftT=decisionTree(left,removedList,depth+1)
+        rightT=decisionTree(right,removedList,depth+1)
+        tree=Tree(leftT,rightT,bestSplit,depth,bestThresh,goodNess)
+        return tree
 
 def main():
     fileName = argv[1]
@@ -199,11 +163,9 @@ def main():
 
     data = quantize(pd.read_csv(fileName, sep=','))
     if(fileName=="Abominable_data_HW05_v420.csv"):
-        data["Class"] = data['Class'].replace({"Assam": 0, "Bhuttan": 1})
-    print(data)
-    decisionTreeHelper(data)
-    for i in range(0,2):
-        print(i)
+        data["Class"] = data['Class'].replace({"Assam": -1, "Bhuttan": 1})
+    #seaborn.plot(data)
+    print(decisionTreeHelper(data))
     #trainer = indent(header(file) + body() + print_trailer(bestAttribute, bestThreshold))
     #file.write(trainer)
     file.close()
