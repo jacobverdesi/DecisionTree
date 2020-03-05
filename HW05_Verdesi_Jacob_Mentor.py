@@ -1,5 +1,7 @@
 import math
 from sys import argv
+
+import numpy as np
 import seaborn
 import pandas as pd
 from joblib.numpy_pickle_utils import xrange
@@ -16,20 +18,38 @@ from matplotlib import pyplot as plt
 
 
 class Tree(object):
-    def __init__(self,left,right,attribute,depth,thresh,gini):
-        self.left = left
-        self.right = right
-        self.attribute=attribute
+    def __init__(self,data,depth):
+        self.data=data
         self.depth = depth
-        self.thresh=thresh
-        self.gini = gini
-        self.rightNode=False
         self.leaf = False
+        self.type= None
+    def split(self):
+        self.bestAttribute = self.data.columns[0]
+        self.bestSplit = (pd.DataFrame(), pd.DataFrame())
+        self.bestThresh = min(self.data.columns[0])
+        self.bestGini=math.inf
+        for attribute in self.data:
+            if attribute == "Class":
+                pass
+            else:
+                attThresh, gini, split, giniList, thresh = bestThreshold(self.data, attribute)
+                #step = (1000 - 0) / float(len(giniList))
+                #rang = [0 + i * step for i in xrange(len(giniList))]
+                #plt.plot(rang, giniList, label=attribute)
+                if gini < self.bestGini:
+                    self.bestAttribute = attribute
+                    self.bestSplit = split
+                    self.bestThresh = attThresh
+                    self.bestGini = gini
+                #space = "\t" * self.depth
+                #print(f"{space}Attribute: {attribute}, Threshold: {attThresh}, Gini: {gini}")
+        self.left=decisionTree(self.bestSplit[0],self.depth+1)
+        self.right=decisionTree(self.bestSplit[1],self.depth+1)
 
     def __str__(self):
         if self.leaf:
             return ""
-        return "\n"+'|\t' * self.depth + self.attribute+" "+str(self.thresh)+" "+str(self.gini)+" "+str(self.right)+str(self.left)
+        return "\n"+'|\t' * self.depth + self.bestAttribute+" "+str(self.bestThresh)+" "+str(self.bestGini)+" "+str(self.right)+str(self.left)
 
 def comment(str):
     return "\"\"\"{" + str + "}\"\"\";"
@@ -104,9 +124,6 @@ def get_quantized_bin_size(data, attribute):
         if (list[index] != list[index + 1]):
             return list[index + 1] - list[index]
 
-
-def decisionTreeHelper(data):
-    return decisionTree(data, 0)
 def bestThreshold(data,attribute):
     index = get_quantized_bin_size(data, attribute)
     bestThresh=0
@@ -115,8 +132,8 @@ def bestThreshold(data,attribute):
     thresh=[]
     giniList=[]
     for threshold in range(min(data[attribute]), max(data[attribute]) + index, index):
-        left = data[data[attribute] >= threshold]
-        right = data[data[attribute] < threshold]
+        left = data[data[attribute] <= threshold]
+        right = data[data[attribute] > threshold]
         dataTotal=data.shape[0]
         leftA,leftB,leftTotal=left[left["Class"]==1].count()["Class"],left[left["Class"]==-1].count()["Class"],left.shape[0]
         rightA,rightB,rightTotal=right[right["Class"]==1].count()["Class"],right[right["Class"]==-1].count()["Class"],right.shape[0]
@@ -140,47 +157,44 @@ def bestThreshold(data,attribute):
 def decisionTree(data, depth):
 
     if depth > 3 or data.shape[0]<27:
-        tree=Tree(None,None,"leaf",depth,0,0)
+        tree=Tree(data,depth)
         tree.leaf=True
+        if data[data["Class"]==1].count()["Class"]>data[data["Class"]==-1].count()["Class"]:
+            tree.type=1
+        else:
+            tree.type=-1
         return tree
     else:
-        bestAttribute= data.columns[0]
-        bestSplit = (pd.DataFrame(),pd.DataFrame())
-        bestThresh = min(data.columns[0])
-        goodNess = math.inf
-        correction=0
-        for attribute in data:
-            if attribute == "Class":
-                pass
-            else:
-                attThresh,gini,split,giniList,thresh=bestThreshold(data,attribute)
-                step = (1000 - 0) / float(len(giniList))
-                rang=[0 + i * step for i in xrange(len(giniList))]
-                plt.plot(rang, giniList,label=attribute)
-                if gini<goodNess:
-                    bestAttribute=attribute
-                    bestSplit=split
-                    bestThresh=attThresh
-                    correction=1000/attThresh
-                    goodNess=gini
-                space="\t"*depth
-                print(f"{space}Attribute: {attribute}, Threshold: {attThresh}, Gini: {gini}")
+        tree=Tree(data,depth)
+        tree.split()
 
-        plt.ylabel("Gini Index: " + str(bestAttribute))
-        plt.xlabel("Thresholds Best: " + str(bestThresh))
-        plt.legend()
-        plt.axvline(correction)
-        plt.title(bestAttribute + 'Thresholds vs Gini Index')
-        plt.show()
-        print("Best: ",bestAttribute,bestThresh,goodNess)
-
-        left,right =bestSplit[0],bestSplit[1]
-
-        rightT=decisionTree(right,depth+1)
-        leftT=decisionTree(left,depth+1)
-        tree=Tree(leftT,rightT,bestAttribute,depth,bestThresh,goodNess)
         return tree
+def nFold(n,data):
+    dataArray=np.array_split(data,n)
+    avg=[]
+    for testData in dataArray:
+        decisionTreeData=dataArray.copy()
+        decisionTreeData.remove(testData)
+        print(decisionTreeData)
+        #tree=decisionTree(data2,0)
+        #avg.append(test(decisionTreeData,tree))
 
+    print(sum(avg)/len(avg))
+def test(data,mainTree):
+    right = 0
+    wrong = 0
+    for index, row in data.iterrows():
+        tree=mainTree
+        while not tree.leaf:
+            if row[tree.bestAttribute]<=tree.bestThresh:
+                tree=tree.left
+            else:
+                tree=tree.right
+        if(row.Class==tree.type):
+            right+=1
+        else:
+            wrong+=1
+    return right/(wrong+right)
 def main():
     fileName = argv[1]
     writeFile = "HW05_Verdesi_Jacob_Trainer.py"
@@ -191,8 +205,10 @@ def main():
         data=quantize(data)
         data["Class"] = data['Class'].replace({"Assam": -1, "Bhuttan": 1})
     #seaborn.pairplot(data)
+    nFold(3,data)
+    #mainTree=decisionTree(data,0)
+    #print(mainTree)
 
-    print(decisionTree(data,0))
     #trainer = indent(header(file) + body() + print_trailer(bestAttribute, bestThreshold))
     #file.write(trainer)
     file.close()
